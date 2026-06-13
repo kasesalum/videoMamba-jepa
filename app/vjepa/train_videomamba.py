@@ -211,7 +211,7 @@ def main(args, resume_preempt=False):
     )
 
     # -- init model
-    encoder, predictor = init_video_mamba_model(
+    mamba_model_kwargs = dict(
         uniform_power=uniform_power,
         use_mask_tokens=use_mask_tokens,
         num_mask_tokens=len(cfgs_mask),
@@ -227,6 +227,9 @@ def main(args, resume_preempt=False):
         pred_embed_dim=pred_embed_dim,
         use_sdpa=use_sdpa,
     )
+    if pred_head_dim is not None:
+        mamba_model_kwargs['pred_head_dim'] = pred_head_dim
+    encoder, predictor = init_video_mamba_model(**mamba_model_kwargs)
     target_encoder = copy.deepcopy(encoder)
 
     # -- make data transforms

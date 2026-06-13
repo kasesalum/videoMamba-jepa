@@ -96,8 +96,10 @@ def main(args_eval, resume_preempt=False):
     num_classes = args_data.get('num_classes')
     eval_num_segments = args_data.get('num_segments', 1)
     eval_frames_per_clip = args_data.get('frames_per_clip', 16)
-    eval_frame_step = args_pretrain.get('frame_step', 4)
-    eval_duration = args_pretrain.get('clip_duration', None)
+    eval_frame_step = args_data.get(
+        'frame_step', args_pretrain.get('frame_step', 4))
+    eval_duration = args_data.get(
+        'clip_duration', args_pretrain.get('clip_duration', None))
     eval_num_views_per_segment = args_data.get('num_views_per_segment', 1)
 
     # -- OPTIMIZATION

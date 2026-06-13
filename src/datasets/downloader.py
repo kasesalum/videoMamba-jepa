@@ -58,36 +58,5 @@ file_names = ['validation.json', 'train.json', 'test.json', 'labels.json']
 # source_directory = '/jumbo/jinlab/datasets/SSv2'  # The directory where the files were downloaded
 # rename_downloaded_files(source_directory, prefix="20bn-something-something-v2-", suffix=".zip")
 
-import csv
-import random
-import json
-
-def find_video_files_finetune_ssv2(directory, labels, output_csv, label_map_file):
-    video_extensions = ('.webm')
-
-    with open(output_csv, 'w', newline='') as csvfile:
-      writer = csv.writer(csvfile, delimiter=' ')
-      label_map_file = open(label_map_file, 'r')
-      labels_str_to_int = json.load(label_map_file)
-
-      label_file = open(labels, 'r')
-      labels_dict = json.load(label_file)
-      for label in labels_dict:
-        file_name = label['id']
-        abs_path = os.path.join(directory, f"{file_name}.webm")
-        class_label = label['template'].replace('[','').replace(']','')
-
-        writer.writerow([abs_path, labels_str_to_int[class_label]])
-
-      # for root, dirs, files in os.walk(directory):
-      #   for file in files:
-      #     abs_path = os.path.join(root, file)
-      #     class_label = random.randint(1, 10)
-      #     writer.writerow([abs_path, class_label])
-
-directory = "/scratch/SSv2/videos/20bn-something-something-v2"
-labels_file = "/scratch/SSv2/labels/train.json"
-output_csv_file = "/scratch/SSv2/labels/SSv2_train_filelist.csv"
-label_map_file = "/scratch/SSv2/labels/labels.json"
-# train file
-find_video_files_finetune_ssv2(directory, labels_file, output_csv_file, label_map_file)
+# For SSv2 CSV generation, use:
+#   python -m src.datasets.generate_ssv2_filelist --help

@@ -36,6 +36,7 @@ class FrameAggregation(nn.Module):
         self.model = model
         self.embed_dim = embed_dim = model.embed_dim
         self.num_heads = model.num_heads
+        self.head_dim = getattr(model, 'head_dim', embed_dim)
         self.attend_across_segments = attend_across_segments
         # 1D-temporal pos-embedding
         self.pos_embed = None
@@ -101,6 +102,7 @@ class ClipAggregation(nn.Module):
         self.tubelet_size = tubelet_size
         self.embed_dim = embed_dim = model.embed_dim
         self.num_heads = model.num_heads
+        self.head_dim = getattr(model, 'head_dim', embed_dim)
         self.attend_across_segments = attend_across_segments
         # 1D-temporal pos-embedding
         self.pos_embed = None

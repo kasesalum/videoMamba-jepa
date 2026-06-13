@@ -242,7 +242,8 @@ class VisionMamba(nn.Module):
         self.tubelet_size = tubelet_size
         self.is_video = num_frames > 1
         self.uniform_power = uniform_power
-        self.num_heads = 1
+        self.head_dim = head_dim
+        self.num_heads = max(1, embed_dim // head_dim)
         print(f'Use checkpoint: {use_checkpoint}')
         print(f'Checkpoint number: {checkpoint_num}')
 
