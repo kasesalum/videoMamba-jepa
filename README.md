@@ -6,6 +6,8 @@ Official PyTorch codebase for VideoMamba trained with V-JEPA by Raif Olson. This
 
 Our version of VideoMamba is trained by passively watching video pixels from large video datasets like SSv2 and the Kinetics dataset in an atttempt to scale VideoMamba models to the size of SOTA ViT models without requiring massive amounts of training time on large datasets to produce good representations.
 
+**New to this repo?** See **[SETUP.md](SETUP.md)** for full environment setup, dataset download links, CSV preparation, and a pre-training checklist.
+
 ## Method
 V-JEPA pretraining is based solely on an unsupervised feature prediction objective, and does not utilize pretrained image encoders, text, negative examples, human annotations, or pixel-level reconstruction.
 
@@ -147,12 +149,17 @@ python -m evals.main_distributed \
 
 ### Setup
 
-Run:
+See **[SETUP.md](SETUP.md)** for complete installation instructions (Linux and Windows), dependency installation, dataset downloads, and verification steps.
+
+Quick start with conda:
+
 ```bash
-conda create -n jepa python=3.9 pip
+conda create -n jepa python=3.11 pip
 conda activate jepa
-python setup.py install
+pip install -r requirements-core.txt
 ```
+
+Then follow the Mamba and dataset steps in [SETUP.md](SETUP.md).
 
 ## License
 See the [LICENSE](./LICENSE) file for details about the license under which this code is made available.
