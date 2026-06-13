@@ -3,6 +3,7 @@
 *.pyc
 src/datasets/SSv2/*
 /build/*
+output/
 output_dir/*
 *.egg
 runs/*/events.out.tfevents.*
