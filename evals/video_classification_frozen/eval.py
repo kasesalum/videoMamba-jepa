@@ -36,7 +36,8 @@ from src.datasets.data_manager import (
 )
 from src.utils.distributed import (
     init_distributed,
-    AllReduce
+    AllReduce,
+    wrap_ddp,
 )
 from src.utils.paths import resolve_path
 from src.utils.schedulers import (
@@ -232,7 +233,7 @@ def main(args_eval, resume_preempt=False):
         warmup=warmup,
         num_epochs=num_epochs,
         use_bfloat16=use_bfloat16)
-    classifier = DistributedDataParallel(classifier, static_graph=True)
+    classifier = wrap_ddp(classifier, static_graph=True)
 
     # -- load training checkpoint
     start_epoch = 0

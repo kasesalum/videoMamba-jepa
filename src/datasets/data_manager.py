@@ -5,11 +5,32 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import os
+
 from logging import getLogger
 
 
 _GLOBAL_SEED = 0
 logger = getLogger()
+
+
+def loader_settings_for_platform(num_workers, pin_mem):
+    """Adjust DataLoader settings for Windows multiprocessing limitations."""
+    if os.name != 'nt':
+        return num_workers, pin_mem
+
+    if num_workers > 0:
+        logger.warning(
+            'Windows: forcing num_workers=0 '
+            '(DataLoader worker subprocesses fail to initialize torch shm.dll).'
+        )
+        num_workers = 0
+
+    if pin_mem:
+        logger.warning('Windows: disabling pin_memory.')
+        pin_mem = False
+
+    return num_workers, pin_mem
 
 
 def init_data(
@@ -44,6 +65,8 @@ def init_data(
     ipe=300,
     log_dir=None,
 ):
+
+    num_workers, pin_mem = loader_settings_for_platform(num_workers, pin_mem)
 
     if (data.lower() == 'imagenet') \
             or (data.lower() == 'inat21') \
@@ -86,6 +109,7 @@ def init_data(
             world_size=world_size,
             rank=rank,
             drop_last=drop_last,
+            pin_mem=pin_mem,
             log_dir=log_dir)
 
     return (data_loader, dist_sampler)

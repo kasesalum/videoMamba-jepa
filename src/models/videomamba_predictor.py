@@ -36,7 +36,7 @@ from timm.models.vision_transformer import _load_weights
 
 import math
 
-from src.models.utils.mamba_imports import Mamba, RMSNorm, layer_norm_fn, rms_norm_fn
+from src.models.utils.mamba_imports import Mamba, RMSNorm, layer_norm_fn, rms_norm_fn, build_mamba_mixer_cls
 
 class Block(nn.Module):
     def __init__(
@@ -119,10 +119,15 @@ def create_block(
     factory_kwargs = {"device": device, "dtype": dtype}
     if ssm_cfg is None:
         ssm_cfg = {}
+    mixer_kwargs = dict(
+        layer_idx=layer_idx,
+        bimamba=bimamba,
+        **ssm_cfg,
+        **factory_kwargs,
+    )
     if head_dim is not None:
-        mixer_cls = partial(Mamba, headdim=head_dim, layer_idx=layer_idx, bimamba=bimamba, **ssm_cfg, **factory_kwargs)
-    else:
-        mixer_cls = partial(Mamba, layer_idx=layer_idx, bimamba=bimamba, **ssm_cfg, **factory_kwargs)
+        mixer_kwargs["headdim"] = head_dim
+    mixer_cls = build_mamba_mixer_cls(**mixer_kwargs)
     norm_cls = partial(nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon)
     block = Block(
         d_model,

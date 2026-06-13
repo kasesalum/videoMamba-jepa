@@ -22,6 +22,7 @@ imageio
 omegaconf
 scipy
 scikit-image
+tensorboard
 tensorboardX
 termcolor
 tqdm

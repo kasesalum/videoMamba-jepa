@@ -14,9 +14,9 @@ data:
   frame_step: 4
 optimization:
   attend_across_segments: true
-  num_epochs: 20
+  num_epochs: 1
   resolution: 224
-  batch_size: 24
+  batch_size: 1
   accumulation_steps: 4
   weight_decay: 0.01
   lr: 0.0001875

@@ -30,7 +30,7 @@ from src.datasets.data_manager import init_data
 from src.masks.random_tube import MaskCollator as TubeMaskCollator
 from src.masks.multiblock3d import MaskCollator as MB3DMaskCollator
 from src.masks.utils import apply_masks
-from src.utils.distributed import init_distributed, AllReduce
+from src.utils.distributed import init_distributed, AllReduce, wrap_ddp
 from src.utils.paths import resolve_path
 from utils.logger import (
     CSVLogger,
@@ -304,9 +304,9 @@ def main(args, resume_preempt=False):
         mixed_precision=mixed_precision,
         betas=betas,
         eps=eps)
-    encoder = DistributedDataParallel(encoder, static_graph=True)
-    predictor = DistributedDataParallel(predictor, static_graph=True)
-    target_encoder = DistributedDataParallel(target_encoder)
+    encoder = wrap_ddp(encoder, static_graph=True)
+    predictor = wrap_ddp(predictor, static_graph=True)
+    target_encoder = wrap_ddp(target_encoder)
     for p in target_encoder.parameters():
         p.requires_grad = False
 

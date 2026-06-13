@@ -143,8 +143,9 @@ Then activate (see next section).
 
 **Windows limitations:**
 - Uses older community `mamba-ssm` 1.1.3 wheels (repo submodule is 2.1.0).
+- VideoMamba expects Mamba options such as `headdim` and bi-directional `bimamba` that the Windows wheel does not provide. The repo’s `src/models/utils/mamba_imports.py` drops unsupported kwargs and disables `bimamba` when the CUDA ops are missing, so smoke tests can run, but this is **not** paper-faithful VideoMamba.
 - Full 300-epoch distributed pretraining is impractical on consumer GPUs.
-- For exact paper parity, use Linux/WSL with a source-built `mamba2`.
+- For exact paper parity on VideoMamba, use Linux/WSL with a source-built `mamba2` (`pip install --no-build-isolation src/mamba2`).
 
 ---
 
@@ -415,6 +416,7 @@ Before launching a multi-day distributed job, confirm the pipeline works on one 
    - `optimization.epochs: 1`
    - `data.batch_size: 2` (or `1` on 6–8 GB GPUs)
    - `optimization.ipe: 5` (optional; limits iterations per epoch)
+   - `data.num_workers: 0` on **Windows** (forced automatically; YAML value is ignored)
 
 2. Run locally:
 
@@ -438,6 +440,8 @@ python -m app.main \
 ```
 
 The training entrypoint automatically routes `videomamba_*` models to `train_videomamba.py` and `vit_*` models to `train.py`.
+
+**Windows (VideoMamba only):** A successful smoke test confirms data loading, loss, and checkpointing. It does not use the full bi-directional Mamba stack from the paper. Expect warnings such as `Dropping unsupported Mamba kwargs for wheel backend: ['bimamba', 'headdim']` — that is normal on Windows. ViT smoke tests are unaffected.
 
 ---
 
@@ -486,6 +490,32 @@ Probe validation accuracy is logged each epoch to:
 
 ## 12. Troubleshooting
 
+### `RuntimeError: Couldn't open shared event` / `OSError: WinError 1114` (`shm.dll`)
+
+- **Cause:** PyTorch `DataLoader` worker subprocesses are unreliable on Windows (`spawn` + shared memory / `shm.dll`).
+- **Fix:** Recent code forces `data.num_workers: 0` and disables `pin_memory` on Windows automatically via `loader_settings_for_platform()` in `src/datasets/data_manager.py`. Retry your command; expect a warning log and slightly slower data loading (single-process decode).
+
+### `ValueError: Default process group has not been initialized`
+
+- **Cause:** Single-GPU local runs on Windows often cannot initialize NCCL; the training code was still wrapping models in `DistributedDataParallel`.
+- **Fix:** Use a recent checkout with `wrap_ddp()` in `src/utils/distributed.py` (skips DDP for single-process runs). Retry the smoke test command from section 10.
+
+### `TypeError: Mamba.__init__() got an unexpected keyword argument 'headdim'`
+
+- **Cause:** The installed Mamba backend (typically the Windows 1.1.3 wheel) does not match the VideoMamba model API.
+- **Windows:** Use `scripts/install.ps1` and a recent checkout with `src/models/utils/mamba_imports.py` (unsupported kwargs are filtered automatically). Warnings about dropped `headdim` / `bimamba` are expected.
+- **Paper-faithful VideoMamba:** Build `src/mamba2` from source on Linux/WSL with `nvcc` available.
+
+### `ModuleNotFoundError: No module named 'tensorboard'`
+
+Install the PyTorch TensorBoard backend (required by `train_videomamba.py`):
+
+```powershell
+pip install tensorboard
+```
+
+(`requirements-core.txt` includes this dependency on recent checkouts.)
+
 ### `ModuleNotFoundError: No module named 'mamba2'` or `selective_scan_cuda`
 
 - **Linux:** Build `src/mamba2` from source with `nvcc` available (`pip install --no-build-isolation src/mamba2`).
@@ -503,7 +533,7 @@ Or use `scripts/activate.ps1` (Windows) / register the `.pth` file as in `script
 
 ### `decord` / video loading errors
 
-- Confirm video paths in the CSV are **absolute** and files exist.
+- Confirm video paths in the CSV exist. Paths in generated file lists are **repo-relative** (e.g. `src/datasets/SSv2/videos/...`) and are resolved automatically at runtime.
 - SSv2 videos are `.webm` by default; pass `--video-ext .mp4` if your files differ.
 
 ### CUDA out of memory

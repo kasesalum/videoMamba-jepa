@@ -9,16 +9,40 @@ import os
 
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
 
 from logging import getLogger
 
 logger = getLogger()
- 
+
+
+def is_dist_avail_and_initialized():
+    return dist.is_available() and dist.is_initialized()
+
+
+def get_world_size():
+    if not is_dist_avail_and_initialized():
+        return 1
+    return dist.get_world_size()
+
+
+def get_rank():
+    if not is_dist_avail_and_initialized():
+        return 0
+    return dist.get_rank()
+
+
+def wrap_ddp(module, **kwargs):
+    """Wrap ``module`` in DDP only when multi-GPU distributed training is active."""
+    if is_dist_avail_and_initialized() and get_world_size() > 1:
+        return DistributedDataParallel(module, **kwargs)
+    return module
+
 
 def init_distributed(port=37123, rank_and_world_size=(None, None)):
 
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_world_size(), dist.get_rank()
+    if is_dist_avail_and_initialized():
+        return get_world_size(), get_rank()
 
     rank, world_size = rank_and_world_size
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -33,17 +57,25 @@ def init_distributed(port=37123, rank_and_world_size=(None, None)):
             world_size, rank = 1, 0
             return world_size, rank
 
-    try:
-        os.environ['MASTER_PORT'] = str(port)
-        torch.distributed.init_process_group(
-            backend='nccl',
-            world_size=world_size,
-            rank=rank
-        )
-    except Exception as e:
-        world_size, rank = 1, 0
-        logger.info(f'Rank: {rank}. Distributed training not available {e}')
+    os.environ['MASTER_PORT'] = str(port)
+    backends = ['nccl', 'gloo'] if torch.cuda.is_available() else ['gloo']
+    if os.name == 'nt':
+        backends = ['gloo', 'nccl'] if torch.cuda.is_available() else ['gloo']
 
+    for backend in backends:
+        try:
+            torch.distributed.init_process_group(
+                backend=backend,
+                world_size=world_size,
+                rank=rank,
+            )
+            logger.info(f'Initialized process group (backend={backend}, rank={rank}, world_size={world_size})')
+            return world_size, rank
+        except Exception as e:
+            logger.info(f'init_process_group failed with backend={backend}: {e}')
+
+    world_size, rank = 1, 0
+    logger.info('Distributed training not available; running in single-process mode')
     return world_size, rank
 
 
