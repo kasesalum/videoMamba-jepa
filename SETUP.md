@@ -196,14 +196,16 @@ python -c "from src.models.vision_transformer import vit_tiny; print('ViT OK')"
 
 ### Something-Something V2 (required for paper experiments)
 
-**Source:** [Qualcomm AI Hub — Something-Something V2](https://developer.qualcomm.com/software/ai-datasets/something-something)
+**Source:** [Qualcomm AI Hub — Something-Something V2](https://www.qualcomm.com/developer/software/something-something-v-2-dataset/downloads)
 
 1. Create an account and request access to the dataset.
 2. Download the video archives and label files.
-3. Extract into a directory layout like:
+3. Extract into `src/datasets/SSv2/` (gitignored; not committed). Expected layout:
+
+**Repo-relative path (recommended):**
 
 ```
-/path/to/SSv2/
+src/datasets/SSv2/
 ├── videos/
 │   └── 20bn-something-something-v2/
 │       ├── 1.webm
@@ -213,8 +215,17 @@ python -c "from src.models.vision_transformer import vit_tiny; print('ViT OK')"
     ├── train.json
     ├── validation.json
     ├── test.json
-    └── labels.json
+    ├── labels.json
+    └── test-answers.csv
 ```
+
+**Windows absolute path (example):**
+
+```
+<repo-root>/src/datasets/SSv2/
+```
+
+If you still have an archive such as `something.tar` in that folder after extraction, you can delete it to reclaim disk space once you confirm the videos play correctly.
 
 **Files you need:**
 
@@ -263,59 +274,88 @@ Organize in PyTorch `ImageFolder` layout:
 
 ## 8. Prepare CSV file lists
 
-The codebase expects **space-delimited CSV files** with no header:
+The codebase expects **space-delimited CSV files** with no header. Video paths are **repo-relative** (portable across machines):
 
 ```
-/absolute/path/to/video.webm 42
-/absolute/path/to/video.webm 17
+src/datasets/SSv2/videos/20bn-something-something-v2/1.webm 42
+src/datasets/SSv2/videos/20bn-something-something-v2/2.webm 17
 ```
+
+`generate_ssv2_filelist` writes repo-relative paths by default. Training code resolves them against the repository root automatically.
 
 For V-JEPA **pretraining**, class labels are ignored (any integer is fine). For **attentive probe** training on SSv2, labels must be correct integers from `labels.json`.
 
 ### Generate SSv2 CSVs
 
-From the repo root (with the environment activated):
+From the repo root (with the environment activated). Set paths once, then run all three generators.
+
+**Linux / macOS:**
 
 ```bash
-# Training split — used for probe training and VideoMamba pretrain
-python -m src.datasets.generate_ssv2_filelist \
-  --video-dir /path/to/SSv2/videos/20bn-something-something-v2 \
-  --labels-json /path/to/SSv2/labels/train.json \
-  --label-map /path/to/SSv2/labels/labels.json \
-  --output /path/to/SSv2/labels/SSv2_train_probe_filelist.csv
+SSV2="$(pwd)/src/datasets/SSv2"
+VIDEOS="$SSV2/videos/20bn-something-something-v2"
+LABELS="$SSV2/labels"
 
-# Validation split — used for probe evaluation
+# Training split — probe training + VideoMamba pretrain
 python -m src.datasets.generate_ssv2_filelist \
-  --video-dir /path/to/SSv2/videos/20bn-something-something-v2 \
-  --labels-json /path/to/SSv2/labels/validation.json \
-  --label-map /path/to/SSv2/labels/labels.json \
-  --output /path/to/SSv2/labels/SSv2_valid_probe_filelist.csv
+  --video-dir "$VIDEOS" \
+  --labels-json "$LABELS/train.json" \
+  --label-map "$LABELS/labels.json" \
+  --output "$LABELS/SSv2_train_probe_filelist.csv"
 
-# Unlabeled-style train list — used for ViT pretrain config
+# Validation split — probe evaluation
 python -m src.datasets.generate_ssv2_filelist \
-  --video-dir /path/to/SSv2/videos/20bn-something-something-v2 \
-  --labels-json /path/to/SSv2/labels/train.json \
-  --label-map /path/to/SSv2/labels/labels.json \
-  --output /path/to/SSv2/labels/SSv2_filelist.csv
+  --video-dir "$VIDEOS" \
+  --labels-json "$LABELS/validation.json" \
+  --label-map "$LABELS/labels.json" \
+  --output "$LABELS/SSv2_valid_probe_filelist.csv"
+
+# Unlabeled-style train list — ViT pretrain config
+python -m src.datasets.generate_ssv2_filelist \
+  --video-dir "$VIDEOS" \
+  --labels-json "$LABELS/train.json" \
+  --label-map "$LABELS/labels.json" \
+  --output "$LABELS/SSv2_filelist.csv"
 ```
 
 **PowerShell (Windows):**
 
 ```powershell
+cd <repo-root>
+. .\scripts\activate.ps1
+
+$SSV2 = "src/datasets/SSv2"
+$VIDEOS = "$SSV2/videos/20bn-something-something-v2"
+$LABELS = "$SSV2/labels"
+
 python -m src.datasets.generate_ssv2_filelist `
-  --video-dir D:\datasets\SSv2\videos\20bn-something-something-v2 `
-  --labels-json D:\datasets\SSv2\labels\train.json `
-  --label-map D:\datasets\SSv2\labels\labels.json `
-  --output D:\datasets\SSv2\labels\SSv2_train_probe_filelist.csv
+  --video-dir $VIDEOS `
+  --labels-json "$LABELS\train.json" `
+  --label-map "$LABELS\labels.json" `
+  --output "$LABELS\SSv2_train_probe_filelist.csv"
+
+python -m src.datasets.generate_ssv2_filelist `
+  --video-dir $VIDEOS `
+  --labels-json "$LABELS\validation.json" `
+  --label-map "$LABELS\labels.json" `
+  --output "$LABELS\SSv2_valid_probe_filelist.csv"
+
+python -m src.datasets.generate_ssv2_filelist `
+  --video-dir $VIDEOS `
+  --labels-json "$LABELS\train.json" `
+  --label-map "$LABELS\labels.json" `
+  --output "$LABELS\SSv2_filelist.csv"
 ```
 
-Repeat for `validation.json` → `SSv2_valid_probe_filelist.csv`.
+Each command prints how many rows were written. Warnings about missing videos usually mean extraction is incomplete.
 
 ---
 
 ## 9. Update experiment configs
 
-All hyperparameters live in YAML files under `configs/`. **You must replace placeholder paths** (`/content/...`, `/scratch/...`) with your local paths before training.
+All hyperparameters live in YAML files under `configs/`. Paths should be **repo-relative** (not machine-specific absolute paths). The training and eval code resolves them against the repository root via `src/utils/paths.py`.
+
+The SSv2 configs in this repo are already set up for the default dataset layout:
 
 ### Paper experiments on SSv2
 
@@ -326,27 +366,33 @@ All hyperparameters live in YAML files under `configs/`. **You must replace plac
 
 ### Fields to update
 
+If you change dataset or output locations, edit paths in the YAML files below. Use repo-relative paths such as `src/datasets/SSv2/...` and `output/...`.
+
 **Pretrain YAML** (`configs/pretrain/*.yaml`):
 
 ```yaml
 data:
   datasets:
-    - /your/path/SSv2_train_probe_filelist.csv   # or SSv2_filelist.csv for ViT
+    # VideoMamba: SSv2_train_probe_filelist.csv
+    # ViT: SSv2_filelist.csv
+    - src/datasets/SSv2/labels/SSv2_train_probe_filelist.csv
 
 logging:
-  folder: /your/path/output/videomambaT16_pretrain
+  folder: output/videomambaT16_pretrain
 ```
 
 **Eval YAML** (`configs/evals/*_ssv2_*.yaml`):
 
 ```yaml
 data:
-  dataset_train: /your/path/SSv2_train_probe_filelist.csv
-  dataset_val: /your/path/SSv2_valid_probe_filelist.csv
+  dataset_train: src/datasets/SSv2/labels/SSv2_train_probe_filelist.csv
+  dataset_val: src/datasets/SSv2/labels/SSv2_valid_probe_filelist.csv
 
 pretrain:
-  folder: /your/path/output/videomambaT16_pretrain   # must contain jepa-latest.pth.tar
+  folder: output/videomambaT16_pretrain   # must contain jepa-latest.pth.tar
 ```
+
+Absolute paths still work if needed, but repo-relative paths are preferred so configs can be shared across machines.
 
 ### Paper probe duration
 
@@ -484,8 +530,8 @@ These are Colab/cluster placeholders from the authors. Every path in the YAML mu
 - [ ] `requirements-core.txt` installed
 - [ ] Mamba installed (source build on Linux, or Windows wheels via `scripts/install.ps1`)
 - [ ] `python scripts/verify_install.py` passes
-- [ ] SSv2 downloaded and extracted
-- [ ] CSV file lists generated with `generate_ssv2_filelist.py`
+- [ ] SSv2 downloaded and extracted to `src/datasets/SSv2/` (`videos/` + `labels/`)
+- [ ] CSV file lists generated in `src/datasets/SSv2/labels/` (`SSv2_*_filelist.csv`)
 - [ ] Config YAML paths updated (data + output folders)
 - [ ] Smoke test completed on 1 GPU
 

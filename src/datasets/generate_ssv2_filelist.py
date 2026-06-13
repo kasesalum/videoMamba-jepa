@@ -3,7 +3,9 @@
 Generate space-delimited CSV file lists for Something-Something V2.
 
 Output format (compatible with src/datasets/video_dataset.py):
-    /absolute/path/to/video.webm 42
+    src/datasets/SSv2/videos/20bn-something-something-v2/1.webm 42
+
+Paths are written relative to the repo root by default so file lists are portable.
 
 Example:
     python -m src.datasets.generate_ssv2_filelist \\
@@ -20,7 +22,7 @@ import csv
 import json
 import os
 import sys
-from typing import Iterable
+from src.utils.paths import get_repo_root, resolve_path
 
 
 def load_label_map(label_map_path: str) -> dict[str, int]:
@@ -38,6 +40,7 @@ def iter_entries(
     video_dir: str,
     label_map: dict[str, int],
     video_ext: str,
+    repo_relative: bool = True,
 ) -> Iterable[tuple[str, int]]:
     with open(labels_json_path, "r", encoding="utf-8") as f:
         records = json.load(f)
@@ -57,7 +60,13 @@ def iter_entries(
             missing_videos += 1
             continue
 
-        yield os.path.abspath(video_path), label_map[label_key]
+        abs_path = os.path.abspath(video_path)
+        if repo_relative:
+            video_path = os.path.relpath(abs_path, get_repo_root()).replace("\\", "/")
+        else:
+            video_path = abs_path
+
+        yield video_path, label_map[label_key]
 
     if missing_labels:
         print(
@@ -77,15 +86,17 @@ def write_filelist(
     label_map_path: str,
     output_csv: str,
     video_ext: str = ".webm",
+    repo_relative: bool = True,
 ) -> int:
     label_map = load_label_map(label_map_path)
-    os.makedirs(os.path.dirname(os.path.abspath(output_csv)), exist_ok=True)
+    output_csv = resolve_path(output_csv)
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
     count = 0
     with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=" ")
         for video_path, class_label in iter_entries(
-            labels_json_path, video_dir, label_map, video_ext
+            labels_json_path, video_dir, label_map, video_ext, repo_relative
         ):
             writer.writerow([video_path, class_label])
             count += 1
@@ -123,6 +134,11 @@ def parse_args() -> argparse.Namespace:
         default=".webm",
         help="Video file extension including dot (default: .webm).",
     )
+    parser.add_argument(
+        "--absolute",
+        action="store_true",
+        help="Write absolute video paths instead of repo-relative paths.",
+    )
     return parser.parse_args()
 
 
@@ -134,6 +150,7 @@ def main() -> None:
         label_map_path=args.label_map,
         output_csv=args.output,
         video_ext=args.video_ext,
+        repo_relative=not args.absolute,
     )
 
 

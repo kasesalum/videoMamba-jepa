@@ -38,6 +38,7 @@ from src.utils.distributed import (
     init_distributed,
     AllReduce
 )
+from src.utils.paths import resolve_path
 from src.utils.schedulers import (
     WarmupCosineSchedule,
     CosineWDSchedule,
@@ -76,7 +77,7 @@ def main(args_eval, resume_preempt=False):
     checkpoint_key = args_pretrain.get('checkpoint_key', 'target_encoder')
     model_name = args_pretrain.get('model_name', None)
     patch_size = args_pretrain.get('patch_size', None)
-    pretrain_folder = args_pretrain.get('folder', None)
+    pretrain_folder = resolve_path(args_pretrain.get('folder', None))
     ckp_fname = args_pretrain.get('checkpoint', None)
     tag = args_pretrain.get('write_tag', None)
     use_sdpa = args_pretrain.get('use_sdpa', True)
@@ -90,8 +91,8 @@ def main(args_eval, resume_preempt=False):
 
     # -- DATA
     args_data = args_eval.get('data')
-    train_data_path = [args_data.get('dataset_train')]
-    val_data_path = [args_data.get('dataset_val')]
+    train_data_path = [resolve_path(args_data.get('dataset_train'))]
+    val_data_path = [resolve_path(args_data.get('dataset_val'))]
     dataset_type = args_data.get('dataset_type', 'VideoDataset')
     num_classes = args_data.get('num_classes')
     eval_num_segments = args_data.get('num_segments', 1)

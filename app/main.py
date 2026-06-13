@@ -14,6 +14,7 @@ import yaml
 
 from app.scaffold import main as app_main
 from src.utils.distributed import init_distributed
+from src.utils.paths import resolve_path
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -48,7 +49,7 @@ def process_main(rank, fname, world_size, devices):
     # Log config
     if rank == 0:
         pprint.PrettyPrinter(indent=4).pprint(params)
-        dump = os.path.join(params['logging']['folder'], 'params-pretrain.yaml')
+        dump = os.path.join(resolve_path(params['logging']['folder']), 'params-pretrain.yaml')
         with open(dump, 'w') as f:
             yaml.dump(params, f)
 

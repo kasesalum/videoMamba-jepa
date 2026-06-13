@@ -31,6 +31,7 @@ from src.masks.random_tube import MaskCollator as TubeMaskCollator
 from src.masks.multiblock3d import MaskCollator as MB3DMaskCollator
 from src.masks.utils import apply_masks
 from src.utils.distributed import init_distributed, AllReduce
+from src.utils.paths import resolve_path
 from utils.logger import (
     CSVLogger,
     gpu_timer,
@@ -110,7 +111,7 @@ def main(args, resume_preempt=False):
     cfgs_data = args.get('data')
     dataset_type = cfgs_data.get('dataset_type', 'videodataset')
     mask_type = cfgs_data.get('mask_type', 'multiblock3d')
-    dataset_paths = cfgs_data.get('datasets', [])
+    dataset_paths = [resolve_path(p) for p in cfgs_data.get('datasets', [])]
     datasets_weights = cfgs_data.get('datasets_weights', None)
     if datasets_weights is not None:
         assert len(datasets_weights) == len(dataset_paths), 'Must have one sampling weight specified for each dataset'
@@ -160,7 +161,7 @@ def main(args, resume_preempt=False):
 
     # -- LOGGING
     cfgs_logging = args.get('logging')
-    folder = cfgs_logging.get('folder')
+    folder = resolve_path(cfgs_logging.get('folder'))
     tag = cfgs_logging.get('write_tag')
 
     # ----------------------------------------------------------------------- #
