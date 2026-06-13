@@ -1,0 +1,32 @@
+# Core dependencies for videoMamba-jepa (Windows-friendly subset)
+# Full requirements.txt includes apex/deepspeed/tensorflow/xformers which are
+# optional for this project and often fail to build on Windows.
+
+torch>=2
+torchvision
+numpy<2.0
+pyyaml
+opencv-python
+submitit
+braceexpand
+webdataset
+timm
+decord
+pandas
+einops
+beartype
+av
+ftfy
+fvcore
+imageio
+omegaconf
+scipy
+scikit-image
+tensorboardX
+termcolor
+tqdm
+transformers>=4.36,<4.46
+wandb
+packaging
+ninja
+triton-windows

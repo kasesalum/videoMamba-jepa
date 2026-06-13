@@ -20,7 +20,7 @@ ftfy
 fvcore
 imageio
 lm_eval
-numpy
+numpy<2.0
 omegaconf
 opencv_python
 packaging
