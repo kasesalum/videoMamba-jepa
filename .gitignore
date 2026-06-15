@@ -1,9 +1,12 @@
+.venv/
 .*.swp
 *.pyc
 src/datasets/SSv2/*
 /build/*
+output/
 output_dir/*
 *.egg
 runs/*/events.out.tfevents.*
 *.egg-info/*
 .aider*
+output/*

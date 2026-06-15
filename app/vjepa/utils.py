@@ -15,8 +15,6 @@ import torch
 
 import src.models.vision_transformer as video_vit
 import src.models.predictor as vit_pred
-import src.models.videomamba as video_mamba
-import src.models.videomamba_predictor as vmamba_pred
 from src.models.utils.multimask import MultiMaskWrapper, PredictorMultiMaskWrapper
 from src.utils.schedulers import (
     WarmupCosineSchedule,
@@ -171,6 +169,9 @@ def init_video_mamba_model(
     zero_init_mask_tokens=True,
     use_sdpa=False,
 ):
+    import src.models.videomamba as video_mamba
+    import src.models.videomamba_predictor as vmamba_pred
+
     encoder = video_mamba.__dict__[model_name](
         img_size=crop_size,
         patch_size=patch_size,

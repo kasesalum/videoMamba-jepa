@@ -30,7 +30,8 @@ from src.datasets.data_manager import init_data
 from src.masks.random_tube import MaskCollator as TubeMaskCollator
 from src.masks.multiblock3d import MaskCollator as MB3DMaskCollator
 from src.masks.utils import apply_masks
-from src.utils.distributed import init_distributed, AllReduce
+from src.utils.distributed import init_distributed, AllReduce, wrap_ddp
+from src.utils.paths import resolve_path
 from utils.logger import (
     CSVLogger,
     gpu_timer,
@@ -110,7 +111,7 @@ def main(args, resume_preempt=False):
     cfgs_data = args.get('data')
     dataset_type = cfgs_data.get('dataset_type', 'videodataset')
     mask_type = cfgs_data.get('mask_type', 'multiblock3d')
-    dataset_paths = cfgs_data.get('datasets', [])
+    dataset_paths = [resolve_path(p) for p in cfgs_data.get('datasets', [])]
     datasets_weights = cfgs_data.get('datasets_weights', None)
     if datasets_weights is not None:
         assert len(datasets_weights) == len(dataset_paths), 'Must have one sampling weight specified for each dataset'
@@ -160,7 +161,7 @@ def main(args, resume_preempt=False):
 
     # -- LOGGING
     cfgs_logging = args.get('logging')
-    folder = cfgs_logging.get('folder')
+    folder = resolve_path(cfgs_logging.get('folder'))
     tag = cfgs_logging.get('write_tag')
 
     # ----------------------------------------------------------------------- #
@@ -211,7 +212,7 @@ def main(args, resume_preempt=False):
     )
 
     # -- init model
-    encoder, predictor = init_video_mamba_model(
+    mamba_model_kwargs = dict(
         uniform_power=uniform_power,
         use_mask_tokens=use_mask_tokens,
         num_mask_tokens=len(cfgs_mask),
@@ -227,6 +228,9 @@ def main(args, resume_preempt=False):
         pred_embed_dim=pred_embed_dim,
         use_sdpa=use_sdpa,
     )
+    if pred_head_dim is not None:
+        mamba_model_kwargs['pred_head_dim'] = pred_head_dim
+    encoder, predictor = init_video_mamba_model(**mamba_model_kwargs)
     target_encoder = copy.deepcopy(encoder)
 
     # -- make data transforms
@@ -300,9 +304,9 @@ def main(args, resume_preempt=False):
         mixed_precision=mixed_precision,
         betas=betas,
         eps=eps)
-    encoder = DistributedDataParallel(encoder, static_graph=True)
-    predictor = DistributedDataParallel(predictor, static_graph=True)
-    target_encoder = DistributedDataParallel(target_encoder)
+    encoder = wrap_ddp(encoder, static_graph=True)
+    predictor = wrap_ddp(predictor, static_graph=True)
+    target_encoder = wrap_ddp(target_encoder)
     for p in target_encoder.parameters():
         p.requires_grad = False
 

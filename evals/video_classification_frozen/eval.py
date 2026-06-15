@@ -36,8 +36,10 @@ from src.datasets.data_manager import (
 )
 from src.utils.distributed import (
     init_distributed,
-    AllReduce
+    AllReduce,
+    wrap_ddp,
 )
+from src.utils.paths import resolve_path
 from src.utils.schedulers import (
     WarmupCosineSchedule,
     CosineWDSchedule,
@@ -76,7 +78,7 @@ def main(args_eval, resume_preempt=False):
     checkpoint_key = args_pretrain.get('checkpoint_key', 'target_encoder')
     model_name = args_pretrain.get('model_name', None)
     patch_size = args_pretrain.get('patch_size', None)
-    pretrain_folder = args_pretrain.get('folder', None)
+    pretrain_folder = resolve_path(args_pretrain.get('folder', None))
     ckp_fname = args_pretrain.get('checkpoint', None)
     tag = args_pretrain.get('write_tag', None)
     use_sdpa = args_pretrain.get('use_sdpa', True)
@@ -90,14 +92,16 @@ def main(args_eval, resume_preempt=False):
 
     # -- DATA
     args_data = args_eval.get('data')
-    train_data_path = [args_data.get('dataset_train')]
-    val_data_path = [args_data.get('dataset_val')]
+    train_data_path = [resolve_path(args_data.get('dataset_train'))]
+    val_data_path = [resolve_path(args_data.get('dataset_val'))]
     dataset_type = args_data.get('dataset_type', 'VideoDataset')
     num_classes = args_data.get('num_classes')
     eval_num_segments = args_data.get('num_segments', 1)
     eval_frames_per_clip = args_data.get('frames_per_clip', 16)
-    eval_frame_step = args_pretrain.get('frame_step', 4)
-    eval_duration = args_pretrain.get('clip_duration', None)
+    eval_frame_step = args_data.get(
+        'frame_step', args_pretrain.get('frame_step', 4))
+    eval_duration = args_data.get(
+        'clip_duration', args_pretrain.get('clip_duration', None))
     eval_num_views_per_segment = args_data.get('num_views_per_segment', 1)
 
     # -- OPTIMIZATION
@@ -229,7 +233,7 @@ def main(args_eval, resume_preempt=False):
         warmup=warmup,
         num_epochs=num_epochs,
         use_bfloat16=use_bfloat16)
-    classifier = DistributedDataParallel(classifier, static_graph=True)
+    classifier = wrap_ddp(classifier, static_graph=True)
 
     # -- load training checkpoint
     start_epoch = 0

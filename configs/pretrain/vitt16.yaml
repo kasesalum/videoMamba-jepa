@@ -4,11 +4,11 @@ tasks_per_node: 8
 data:
   dataset_type: VideoDataset
   datasets:
-    - /content/SSv2_filelist.csv
+    - src/datasets/SSv2/labels/SSv2_filelist.csv
     # - /your_path_to_ssv2_csv_file_index.csv
     # - /your_path_to_howto100m_csv_file_index.csv
   decode_one_clip: true
-  batch_size: 24
+  batch_size: 1
   num_clips: 1
   num_frames: 16
   tubelet_size: 2
@@ -16,7 +16,7 @@ data:
   crop_size: 224
   patch_size: 16
   pin_mem: true
-  num_workers: 12
+  num_workers: 2
   filter_short_videos: false
   clip_duration: null
 data_aug:
@@ -30,7 +30,7 @@ data_aug:
   - 1.0
   reprob: 0.0
 logging:
-  folder:  /content/drive/MyDrive/jepa/output_dir/vitT16
+  folder: output/vitt16_pretrain
   write_tag: jepa
 loss:
   loss_exp: 1.0
@@ -75,12 +75,12 @@ model:
   use_mask_tokens: true
   zero_init_mask_tokens: true
 optimization:
-  ipe: 300
+  ipe: 5
   ipe_scale: 1.25
   clip_grad: 10.0
   weight_decay: 0.04
   final_weight_decay: 0.4
-  epochs: 300
+  epochs: 1
   warmup: 40
   start_lr: 0.0002
   lr: 0.000625

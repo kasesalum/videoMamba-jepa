@@ -19,6 +19,7 @@ from decord import VideoReader, cpu
 import torch
 
 from src.datasets.utils.weighted_sampler import DistributedWeightedSampler
+from src.utils.paths import resolve_path
 
 _GLOBAL_SEED = 0
 logger = getLogger()
@@ -127,11 +128,12 @@ class VideoDataset(torch.utils.data.Dataset):
         self.num_samples_per_dataset = []
         for data_path in self.data_paths:
             print(self.data_paths)
+            data_path = resolve_path(data_path)
 
             if data_path[-4:] == '.csv':
                 data = pd.read_csv(data_path, header=None, delimiter=" ")
                 print(data[:5])
-                samples += list(data.values[:, 0])
+                samples += [resolve_path(s) for s in data.values[:, 0]]
                 labels += list(data.values[:, 1])
                 num_samples = len(data)
                 self.num_samples_per_dataset.append(num_samples)
@@ -139,7 +141,7 @@ class VideoDataset(torch.utils.data.Dataset):
             elif data_path[-4:] == '.npy':
                 data = np.load(data_path, allow_pickle=True)
                 data = list(map(lambda x: repr(x)[1:-1], data))
-                samples += data
+                samples += [resolve_path(s) for s in data]
                 labels += [0] * len(data)
                 num_samples = len(data)
                 self.num_samples_per_dataset.append(len(data))

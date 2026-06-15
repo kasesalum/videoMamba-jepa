@@ -13,13 +13,20 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger()
 
 
+def _eval_module(eval_name, args_eval):
+    model_name = args_eval.get('pretrain', {}).get('model_name', '')
+    if model_name.startswith('videomamba'):
+        return f'evals.{eval_name}.eval_videomamba'
+    return f'evals.{eval_name}.eval'
+
+
 def main(
     eval_name,
     args_eval,
     resume_preempt=False
 ):
-    logger.info(f'Running evaluation: {eval_name}')
-    # return importlib.import_module(f'evals.{eval_name}.eval').main(
-    return importlib.import_module(f'evals.{eval_name}.eval_videomamba').main(
+    module = _eval_module(eval_name, args_eval)
+    logger.info(f'Running evaluation: {eval_name} via {module}')
+    return importlib.import_module(module).main(
         args_eval=args_eval,
         resume_preempt=resume_preempt)

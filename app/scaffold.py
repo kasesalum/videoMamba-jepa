@@ -11,13 +11,19 @@ import sys
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger()
- 
+
+
+def _pretrain_module(app, args):
+    model_name = args.get('model', {}).get('model_name', '')
+    if model_name.startswith('videomamba'):
+        return f'app.{app}.train_videomamba'
+    return f'app.{app}.train'
+
 
 def main(app, args, resume_preempt=False):
 
-    logger.info(f'Running pre-training of app: {app}')
-    return importlib.import_module(f'app.{app}.train_videomamba').main(
-    # return importlib.import_module(f'app.{app}.train').main(
-
+    module = _pretrain_module(app, args)
+    logger.info(f'Running pre-training of app: {app} via {module}')
+    return importlib.import_module(module).main(
         args=args,
         resume_preempt=resume_preempt)
