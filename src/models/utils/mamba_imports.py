@@ -8,6 +8,8 @@ import warnings
 from functools import partial
 from pathlib import Path
 
+import torch.nn as nn
+
 _REPO_SRC = Path(__file__).resolve().parents[2]
 _MAMBA2_SIMPLE = _REPO_SRC / "mamba2" / "mamba_ssm" / "modules" / "mamba_simple.py"
 
@@ -47,8 +49,18 @@ def _import_mamba():
 
 
 Mamba, RMSNorm, layer_norm_fn, rms_norm_fn, _MAMBA_SOURCE = _import_mamba()
+if RMSNorm is None:
+    warnings.warn(
+        "Mamba RMSNorm/fused layernorm ops are unavailable; falling back to torch.nn.LayerNorm.",
+        stacklevel=2,
+    )
+    RMSNorm = nn.LayerNorm
 _MAMBA_INIT_PARAMS = set(inspect.signature(Mamba.__init__).parameters)
 _BIMAMBA_OPS_AVAILABLE = _bimamba_ops_available()
+
+
+def fused_add_norm_available() -> bool:
+    return layer_norm_fn is not None and rms_norm_fn is not None
 
 
 def build_mamba_mixer_cls(**kwargs):
@@ -74,4 +86,5 @@ __all__ = [
     "layer_norm_fn",
     "rms_norm_fn",
     "build_mamba_mixer_cls",
+    "fused_add_norm_available",
 ]

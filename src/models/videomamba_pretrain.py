@@ -18,7 +18,14 @@ from timm.models.vision_transformer import _load_weights
 
 import math
 
-from src.models.utils.mamba_imports import Mamba, RMSNorm, layer_norm_fn, rms_norm_fn, build_mamba_mixer_cls
+from src.models.utils.mamba_imports import (
+    Mamba,
+    RMSNorm,
+    layer_norm_fn,
+    rms_norm_fn,
+    build_mamba_mixer_cls,
+    fused_add_norm_available,
+)
 
 
 class Block(nn.Module):
@@ -39,7 +46,7 @@ class Block(nn.Module):
         """
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
-        self.fused_add_norm = fused_add_norm
+        self.fused_add_norm = fused_add_norm and fused_add_norm_available()
         self.mixer = mixer_cls(dim)
         self.norm = norm_cls(dim)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -107,7 +114,9 @@ def create_block(
         **ssm_cfg,
         **factory_kwargs,
     )
-    norm_cls = partial(nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon)
+    use_rms_norm = rms_norm and RMSNorm is not None
+    norm_cls = partial(nn.LayerNorm if not use_rms_norm else RMSNorm, eps=norm_epsilon)
+    fused_add_norm = fused_add_norm and fused_add_norm_available()
     block = Block(
         d_model,
         mixer_cls,
@@ -270,7 +279,7 @@ class VisionMamba(nn.Module):
         factory_kwargs = {"device": device, "dtype": dtype} # follow MambaLMHeadModel
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
-        self.fused_add_norm = fused_add_norm
+        self.fused_add_norm = fused_add_norm and fused_add_norm_available()
         self.use_checkpoint = use_checkpoint
         self.checkpoint_num = checkpoint_num
         print(f'Use checkpoint: {use_checkpoint}')
