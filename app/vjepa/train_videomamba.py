@@ -62,14 +62,14 @@ np.random.seed(_GLOBAL_SEED)
 torch.manual_seed(_GLOBAL_SEED)
 torch.backends.cudnn.benchmark = True
 
-log_dir = "/scratch/Raif/videoMamba/logs"
-
 logger = get_logger(__name__)
-tensorboard_writer = SummaryWriter(log_dir=log_dir)
+tensorboard_writer = None
 
 
 
 def main(args, resume_preempt=False):
+    global tensorboard_writer
+
     # ----------------------------------------------------------------------- #
     #  PASSED IN PARAMS FROM CONFIG FILE
     # ----------------------------------------------------------------------- #
@@ -178,6 +178,11 @@ def main(args, resume_preempt=False):
     # -- init torch distributed backend
     world_size, rank = init_distributed()
     logger.info(f'Initialized (rank/world-size) {rank}/{world_size}')
+
+    if rank == 0:
+        tensorboard_dir = os.path.join(folder, 'tensorboard')
+        os.makedirs(tensorboard_dir, exist_ok=True)
+        tensorboard_writer = SummaryWriter(log_dir=tensorboard_dir)
 
     # -- set device
     if not torch.cuda.is_available():
@@ -568,12 +573,13 @@ def main(args, resume_preempt=False):
                            torch.cuda.max_memory_allocated() / 1024.0**2,
                            gpu_time_meter.avg,
                            wall_time_meter.avg))
-                    tensorboard_writer.add_scalar('Loss/Train', loss_meter.avg, epoch*ipe+itr)
-                    tensorboard_writer.add_scalar('Loss/Train_jepa', jepa_loss_meter.avg, epoch*ipe+itr)
-                    tensorboard_writer.add_scalar('Time/GPU', gpu_time_meter.avg, epoch*ipe+itr)
-                    tensorboard_writer.add_scalar('Memory/GPU', torch.cuda.max_memory_allocated() / 1024.0**2, epoch*ipe+itr)
-                    tensorboard_writer.add_scalar('HyperParams/Learning_Rate', _new_lr, epoch*ipe+itr)
-                    tensorboard_writer.add_scalar('HyperParams/Weight_Decay', _new_wd, epoch*ipe+itr)
+                    if tensorboard_writer is not None:
+                        tensorboard_writer.add_scalar('Loss/Train', loss_meter.avg, epoch*ipe+itr)
+                        tensorboard_writer.add_scalar('Loss/Train_jepa', jepa_loss_meter.avg, epoch*ipe+itr)
+                        tensorboard_writer.add_scalar('Time/GPU', gpu_time_meter.avg, epoch*ipe+itr)
+                        tensorboard_writer.add_scalar('Memory/GPU', torch.cuda.max_memory_allocated() / 1024.0**2, epoch*ipe+itr)
+                        tensorboard_writer.add_scalar('HyperParams/Learning_Rate', _new_lr, epoch*ipe+itr)
+                        tensorboard_writer.add_scalar('HyperParams/Weight_Decay', _new_wd, epoch*ipe+itr)
 
                     if optim_stats is not None:
                         logger.info(
@@ -595,12 +601,12 @@ def main(args, resume_preempt=False):
                                grad_stats.min,
                                grad_stats.max,
                                grad_stats.global_norm))
-                        tensorboard_writer.add_scalar('Grad/Encoder_first', grad_stats.first_layer, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Encoder_last', grad_stats.last_layer, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Encoder_min', grad_stats.min, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Encoder_max', grad_stats.max, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Encoder_global_norm', grad_stats.global_norm, epoch*ipe+itr)
-
+                        if tensorboard_writer is not None:
+                            tensorboard_writer.add_scalar('Grad/Encoder_first', grad_stats.first_layer, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Encoder_last', grad_stats.last_layer, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Encoder_min', grad_stats.min, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Encoder_max', grad_stats.max, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Encoder_global_norm', grad_stats.global_norm, epoch*ipe+itr)
 
                     if grad_stats_pred is not None:
                         logger.info(
@@ -611,12 +617,14 @@ def main(args, resume_preempt=False):
                                grad_stats_pred.min,
                                grad_stats_pred.max,
                                grad_stats_pred.global_norm))
-                        tensorboard_writer.add_scalar('Grad/Predictor_first', grad_stats_pred.first_layer, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Predictor_last', grad_stats_pred.last_layer, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Predictor_min', grad_stats_pred.min, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Predictor_max', grad_stats_pred.max, epoch*ipe+itr)
-                        tensorboard_writer.add_scalar('Grad/Predictor_global_norm', grad_stats_pred.global_norm, epoch*ipe+itr)
-                    tensorboard_writer.flush()
+                        if tensorboard_writer is not None:
+                            tensorboard_writer.add_scalar('Grad/Predictor_first', grad_stats_pred.first_layer, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Predictor_last', grad_stats_pred.last_layer, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Predictor_min', grad_stats_pred.min, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Predictor_max', grad_stats_pred.max, epoch*ipe+itr)
+                            tensorboard_writer.add_scalar('Grad/Predictor_global_norm', grad_stats_pred.global_norm, epoch*ipe+itr)
+                    if tensorboard_writer is not None:
+                        tensorboard_writer.flush()
             log_stats()
             assert not np.isnan(loss), 'loss is nan'
 
