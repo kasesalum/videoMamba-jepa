@@ -497,7 +497,7 @@ class VisionMambaPredictor(nn.Module):
                 residual = hidden_states
             else:
                 residual = residual + self.drop_path(hidden_states)
-            hidden_states = self.predictor_norm(residual.to(dtype=self.norm.weight.dtype))
+            hidden_states = self.predictor_norm(residual.to(dtype=self.predictor_norm.weight.dtype))
         else:
             # Set prenorm=False here since we don't need the residual
             fused_add_norm_fn = rms_norm_fn if isinstance(self.predictor_norm, RMSNorm) else layer_norm_fn

@@ -23,6 +23,7 @@ For the paper experiments (VideoMamba-Tiny and ViT-Tiny with V-JEPA on Something
 8. [Prepare CSV file lists](#8-prepare-csv-file-lists)
 9. [Update experiment configs](#9-update-experiment-configs)
 10. [Smoke test before full training](#10-smoke-test-before-full-training)
+    - [UT Rocket (Slurm) from the login node](#ut-rocket-slurm-from-the-login-node)
 11. [Training workflow overview](#11-training-workflow-overview)
 12. [Troubleshooting](#12-troubleshooting)
 
@@ -443,6 +444,152 @@ The training entrypoint automatically routes `videomamba_*` models to `train_vid
 
 **Windows (VideoMamba only):** A successful smoke test confirms data loading, loss, and checkpointing. It does not use the full bi-directional Mamba stack from the paper. Expect warnings such as `Dropping unsupported Mamba kwargs for wheel backend: ['bimamba', 'headdim']` — that is normal on Windows. ViT smoke tests are unaffected.
 
+### UT Rocket (Slurm) from the login node
+
+On the [UT Rocket](https://ondemand.hpc.ut.ee) cluster you **cannot run training on the login node** (`login1`). You must submit a job with `sbatch` or request a short interactive GPU shell with `srun`. File editing, `git`, and `pip install` are fine on the login node; GPU work is not.
+
+**Prerequisites on Rocket (do these once):**
+
+1. Clone with submodules and complete the [Linux install](#linux-recommended) into `.venv` in the repo.
+2. Copy or download SSv2 to the cluster (do **not** commit videos via git). Regenerate CSV file lists **on Rocket** (section 8) so paths match the cluster filesystem.
+3. Find your Slurm **account** (not your username):
+
+```bash
+sacctmgr show assoc where user=$USER -p
+```
+
+Use the `Account` column (e.g. `uthpc`) with `-A` / `#SBATCH --account=...`.
+
+**Always use the venv Python on Rocket.** Conda `(base)` may hijack `python`/`pip`. Prefer:
+
+```bash
+.venv/bin/python ...
+.venv/bin/pip ...
+```
+
+Check with `which python` — it should end in `videoMamba-jepa/.venv/bin/python`.
+
+#### Step 1 — Verify imports on a GPU node
+
+From the **login node**, request a short interactive GPU session:
+
+```bash
+srun -A uthpc -p gpu --gres=gpu:tesla:1 --cpus-per-task=8 --mem=32G --time=01:15:00 --pty bash
+```
+
+Inside that shell:
+
+```bash
+cd ~/videoMamba-jepa
+
+module purge
+module load gcc/11
+module load cuda/12.1
+
+export LIBSTDCPP_DIR="$(dirname "$(gcc -print-file-name=libstdc++.so.6)")"
+export LD_LIBRARY_PATH="$LIBSTDCPP_DIR:${LD_LIBRARY_PATH:-}"
+export LD_PRELOAD="$(gcc -print-file-name=libstdc++.so.6)"
+export PYTHONPATH="$(pwd):$(pwd)/src"
+
+.venv/bin/python scripts/verify_install.py
+```
+
+Exit when done (`exit`). If `gcc/11` is unavailable, use `module avail gcc` and pick a GCC 11+ module.
+
+#### Step 2 — Submit a one-GPU smoke test (`sbatch`)
+
+Create `smoke_videomamba.sh` in the repo root. The **first line must** be `#!/bin/bash`:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=vjepa-smoke
+#SBATCH --partition=gpu
+#SBATCH --account=YOUR_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:tesla:1
+#SBATCH --mem=64G
+#SBATCH --time=01:00:00
+#SBATCH -o logs/smoke_%j.out
+#SBATCH -e logs/smoke_%j.err
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
+
+module purge
+module load gcc/11
+module load cuda/12.1
+
+export LIBSTDCPP_DIR="$(dirname "$(gcc -print-file-name=libstdc++.so.6)")"
+export LD_LIBRARY_PATH="$LIBSTDCPP_DIR:${LD_LIBRARY_PATH:-}"
+export LD_PRELOAD="$(gcc -print-file-name=libstdc++.so.6)"
+export PYTHONPATH="$(pwd):$(pwd)/src"
+
+mkdir -p logs output/videomambaT16_pretrain
+
+# Do not wrap with srun for a single-task job (avoids CPU-binding errors).
+.venv/bin/python -m app.main \
+  --fname configs/pretrain/videomambaT16.yaml \
+  --devices cuda:0
+```
+
+Submit from the **login node**:
+
+```bash
+cd ~/videoMamba-jepa
+mkdir -p logs
+chmod +x smoke_videomamba.sh
+sbatch smoke_videomamba.sh
+```
+
+Monitor:
+
+```bash
+squeue -u $USER
+tail -f logs/smoke_JOBID.out
+tail -f logs/smoke_JOBID.err
+66695183
+
+```
+
+Submit and follow logs in one command:
+
+```bash
+jid=$(sbatch --parsable smoke_videomamba.sh) && \
+echo "Submitted job $jid" && \
+while [ ! -f "logs/smoke_${jid}.out" ]; do sleep 1; done && \
+tail -f "logs/smoke_${jid}.out"
+```
+
+Cancel a job:
+
+```bash
+scancel JOBID
+# or: scancel -u $USER
+```
+
+**Success on Rocket:** loss lines in the log and these files exist:
+
+```
+output/videomambaT16_pretrain/jepa-latest.pth.tar
+output/videomambaT16_pretrain/params-pretrain.yaml
+```
+
+**Rocket-specific notes:**
+
+| Issue | What to do |
+|-------|------------|
+| `Invalid account` | Use `sacctmgr` account (e.g. `uthpc`), not your username |
+| `No module named 'torch'` | Use `.venv/bin/python`, not conda `python` |
+| `GLIBCXX_3.4.29 not found` | `module load gcc/11` and set `LD_LIBRARY_PATH` / `LD_PRELOAD` as above |
+| `Permission denied: '/scratch'` | Use a recent checkout; TensorBoard logs go under `logging.folder` |
+| `FileNotFoundError` for SSv2 CSV | Dataset/CSVs missing on cluster — copy SSv2 and regenerate CSVs on Rocket |
+| `sbatch: first line must start with #!` | Ensure line 1 of the script is exactly `#!/bin/bash` |
+| `CPU binding` / `srun` errors | For 1 GPU / 1 task, call `.venv/bin/python` directly (no `srun`) |
+
+For a quick interactive smoke test (debugging only, not long runs), use `srun ... --pty bash` as in step 1, then run the same `.venv/bin/python -m app.main ...` command inside that shell.
+
 ---
 
 ## 11. Training workflow overview
@@ -550,6 +697,37 @@ Ensure you are on a recent checkout where `app/scaffold.py` routes `vit_*` model
 
 These are Colab/cluster placeholders from the authors. Every path in the YAML must be edited to match your machine before training.
 
+### `GLIBCXX_3.4.29 not found` when importing `mamba_ssm` (Linux / HPC)
+
+- **Cause:** Mamba CUDA wheels were built with a newer GCC than the `libstdc++.so.6` picked up at runtime (common on shared clusters).
+- **Fix:** Before running Python, load a newer GCC module and prepend its `libstdc++` to the loader path:
+
+```bash
+module load gcc/11
+export LD_LIBRARY_PATH="$(dirname "$(gcc -print-file-name=libstdc++.so.6)"):${LD_LIBRARY_PATH:-}"
+export LD_PRELOAD="$(gcc -print-file-name=libstdc++.so.6)"
+```
+
+Include these lines in `sbatch` scripts. Verify with `.venv/bin/python scripts/verify_install.py` on a GPU node.
+
+### `TypeError: the first argument must be callable` in `create_block` / `RMSNorm`
+
+- **Cause:** `mamba_ssm.ops.triton.layernorm` is unavailable; `RMSNorm` is `None`.
+- **Fix:** Use a recent checkout with `src/models/utils/mamba_imports.py` (falls back to `torch.nn.LayerNorm` and disables fused add+norm when Triton layernorm ops are missing). Smoke tests can proceed; fused kernels are a performance optimization.
+
+### `FileNotFoundError` for `SSv2_*_filelist.csv` on a cluster
+
+- **Cause:** CSV file lists were generated on another machine and not copied, or SSv2 was never placed on the cluster.
+- **Fix:** Copy `src/datasets/SSv2/` to the cluster and run the CSV generators from section 8 **on the cluster**. Paths in the CSVs are repo-relative and resolve against the repo root at runtime.
+
+### `sbatch: first line must start with #!`
+
+The batch script must begin with `#!/bin/bash` (no blank lines or comments before it).
+
+### Training on the login node (Rocket / Slurm)
+
+Running GPU jobs directly on login nodes is prohibited. Use `sbatch` or a short `srun --pty bash` session, then run training inside the allocated job.
+
 ---
 
 ## Quick reference checklist
@@ -564,5 +742,6 @@ These are Colab/cluster placeholders from the authors. Every path in the YAML mu
 - [ ] CSV file lists generated in `src/datasets/SSv2/labels/` (`SSv2_*_filelist.csv`)
 - [ ] Config YAML paths updated (data + output folders)
 - [ ] Smoke test completed on 1 GPU
+- [ ] (Rocket) Slurm account identified; smoke test submitted with `sbatch` from login node
 
 When all items are checked, the environment is ready for training.

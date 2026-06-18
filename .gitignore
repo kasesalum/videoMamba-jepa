@@ -10,3 +10,4 @@ runs/*/events.out.tfevents.*
 *.egg-info/*
 .aider*
 output/*
+notes.txt
