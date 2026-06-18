@@ -8,7 +8,7 @@ data:
     # - /your_path_to_ssv2_csv_file_index.csv
     # - /your_path_to_howto100m_csv_file_index.csv
   decode_one_clip: true
-  batch_size: 1
+  batch_size: 24
   # batch_size: 48
   num_clips: 1
   num_frames: 16
@@ -17,7 +17,7 @@ data:
   crop_size: 224
   patch_size: 16
   pin_mem: true
-  num_workers: 2
+  num_workers: 12
   filter_short_videos: false
   clip_duration: null
 data_aug:
@@ -78,12 +78,12 @@ model:
   use_mask_tokens: true
   zero_init_mask_tokens: true
 optimization:
-  ipe: 5
+  ipe: 300
   ipe_scale: 1.25
   clip_grad: 10.0
   weight_decay: 0.1
   final_weight_decay: 0.4
-  epochs: 1
+  epochs: 300
   accumulation_steps: 4
   warmup: 20
   start_lr: 1.0e-06
