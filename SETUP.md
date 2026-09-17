@@ -498,49 +498,14 @@ Exit when done (`exit`). If `gcc/11` is unavailable, use `module avail gcc` and 
 
 #### Step 2 — Submit a one-GPU smoke test (`sbatch`)
 
-Create `smoke_videomamba.sh` in the repo root. The **first line must** be `#!/bin/bash`:
+Use the checked-in template [`hpc/rocket_smoke.sbatch`](hpc/rocket_smoke.sbatch) (see also [`hpc/README.md`](hpc/README.md)). Edit `#SBATCH --account=YOUR_ACCOUNT` before the first submit.
 
-```bash
-#!/bin/bash
-#SBATCH --job-name=vjepa-smoke
-#SBATCH --partition=gpu
-#SBATCH --account=YOUR_ACCOUNT
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:tesla:1
-#SBATCH --mem=64G
-#SBATCH --time=01:00:00
-#SBATCH -o logs/smoke_%j.out
-#SBATCH -e logs/smoke_%j.err
-
-set -euo pipefail
-cd "${SLURM_SUBMIT_DIR:-$PWD}"
-
-module purge
-module load gcc/11
-module load cuda/12.1
-
-export LIBSTDCPP_DIR="$(dirname "$(gcc -print-file-name=libstdc++.so.6)")"
-export LD_LIBRARY_PATH="$LIBSTDCPP_DIR:${LD_LIBRARY_PATH:-}"
-export LD_PRELOAD="$(gcc -print-file-name=libstdc++.so.6)"
-export PYTHONPATH="$(pwd):$(pwd)/src"
-
-mkdir -p logs output/videomambaT16_pretrain
-
-# Do not wrap with srun for a single-task job (avoids CPU-binding errors).
-.venv/bin/python -m app.main \
-  --fname configs/pretrain/videomambaT16.yaml \
-  --devices cuda:0
-```
-
-Submit from the **login node**:
+Submit from the **login node** (repo root):
 
 ```bash
 cd ~/videoMamba-jepa
 mkdir -p logs
-chmod +x smoke_videomamba.sh
-sbatch smoke_videomamba.sh
+sbatch hpc/rocket_smoke.sbatch
 ```
 
 Monitor:
@@ -549,14 +514,12 @@ Monitor:
 squeue -u $USER
 tail -f logs/smoke_JOBID.out
 tail -f logs/smoke_JOBID.err
-66695183
-
 ```
 
 Submit and follow logs in one command:
 
 ```bash
-jid=$(sbatch --parsable smoke_videomamba.sh) && \
+jid=$(sbatch --parsable hpc/rocket_smoke.sbatch) && \
 echo "Submitted job $jid" && \
 while [ ! -f "logs/smoke_${jid}.out" ]; do sleep 1; done && \
 tail -f "logs/smoke_${jid}.out"
