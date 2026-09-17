@@ -1,0 +1,64 @@
+base_config: configs/diagnostics/base_short_pretrain.yaml
+output_root: diagnostic_runs/phase1
+config_root: diagnostic_runs/configs/phase1
+budget:
+  eur_cap: 1000.0
+  price_eur_per_lumi_gpu_hour: 0.35
+  setup_fraction: 0.10
+  reserve_fraction: 0.20
+  lumi_gpu_modules_per_node: 4
+  estimated_wall_ms_per_microstep: 2000.0
+run:
+  launch: local
+  devices:
+    - cuda:0
+variants:
+  - name: vit_tiny_multiblock_layernorm
+    patch:
+      trainer: train
+      model.model_name: vit_tiny
+      model.pred_depth: 4
+      model.pred_embed_dim: 96
+      model.target_transform: layer_norm
+      data.mask_type: multiblock3d
+  - name: vmamba_tiny_mamba_pred_multiblock_layernorm
+    patch:
+      trainer: train_videomamba
+      model.model_name: videomamba_tiny
+      model.use_vit_pred: false
+      model.target_transform: layer_norm
+      data.mask_type: multiblock3d
+  - name: vmamba_tiny_attn_pred_multiblock_layernorm
+    patch:
+      trainer: train_videomamba
+      model.model_name: videomamba_tiny
+      model.use_vit_pred: true
+      model.target_transform: layer_norm
+      data.mask_type: multiblock3d
+  - name: vmamba_tiny_mamba_pred_multiblock_raw
+    patch:
+      trainer: train_videomamba
+      model.model_name: videomamba_tiny
+      model.use_vit_pred: false
+      model.target_transform: raw
+      data.mask_type: multiblock3d
+  - name: vmamba_tiny_mamba_pred_rowtube_layernorm
+    patch:
+      trainer: train_videomamba
+      model.model_name: videomamba_tiny
+      model.use_vit_pred: false
+      model.target_transform: layer_norm
+      data.mask_type: row_tube
+      mask:
+        - ratio: 0.9
+          shared_rows_across_batch: false
+  - name: vmamba_tiny_attn_pred_rowtube_layernorm
+    patch:
+      trainer: train_videomamba
+      model.model_name: videomamba_tiny
+      model.use_vit_pred: true
+      model.target_transform: layer_norm
+      data.mask_type: row_tube
+      mask:
+        - ratio: 0.9
+          shared_rows_across_batch: false

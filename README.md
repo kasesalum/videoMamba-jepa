@@ -11,7 +11,37 @@ Our version of VideoMamba is trained by passively watching video pixels from lar
 ## Method
 V-JEPA pretraining is based solely on an unsupervised feature prediction objective, and does not utilize pretrained image encoders, text, negative examples, human annotations, or pixel-level reconstruction.
 
+## Research Documents
 
+- [Current status brief](docs/current_status_brief.md)
+- [Research rationale](docs/research_rationale_memo.md)
+- [Research handoff and continuation guide](docs/research_handoff.md)
+- [Implementation and diagnostic runbook](docs/diagnostic_study.md)
+- [Generated-video sanity results](docs/local_generated_results.md)
+- [Local SSv2 subset sanity results](docs/local_ssv2_results.md)
+- [Experiment timeline and local compute report](docs/experiment_timeline.md)
+- [LUMI transition plan](docs/lumi_transition_plan.md)
+- [HPC/Rocket/LUMI usage and cost assessment](docs/hpc_lumi_usage.md)
+
+## Documentation Map
+
+- What is this project?
+  - Start with [Current status brief](docs/current_status_brief.md) and
+    [Research rationale](docs/research_rationale_memo.md).
+- What has already been done?
+  - Use [Experiment timeline and local compute report](docs/experiment_timeline.md)
+    for timings and [Local SSv2 subset sanity results](docs/local_ssv2_results.md)
+    for interpretation.
+- How should the work continue?
+  - Use [Research handoff and continuation guide](docs/research_handoff.md) and
+    [Implementation and diagnostic runbook](docs/diagnostic_study.md).
+- How should the project move to Rocket or LUMI?
+  - Use [HPC/Rocket/LUMI usage and cost assessment](docs/hpc_lumi_usage.md),
+    [LUMI transition plan](docs/lumi_transition_plan.md), and the concrete
+    Slurm templates in [hpc/](hpc/).
+- How much compute might be needed?
+  - Use the conference-compute assessment in
+    [HPC/Rocket/LUMI usage and cost assessment](docs/hpc_lumi_usage.md).
 
 ## Code Structure
 
@@ -25,6 +55,7 @@ All experiment parameters are specified in config files (as opposed to command-l
 │   ├── vjepa                 #   Video JEPA pre-training
 │   ├── main_distributed.py   #   entrypoint for launching app on slurm cluster
 │   └── main.py               #   entrypoint for launching app locally on your machine for debugging
+├── diagnostics               # smoke tests, subset helpers, frozen probe, result summaries
 ├── evals                     # the only place where evaluation of 'apps' are allowed
 │   ├── image_classification  #   training an attentive probe for image classification with frozen backbone
 │   ├── video_classification  #   training an attentive probe for video classification with frozen backbone
@@ -36,7 +67,9 @@ All experiment parameters are specified in config files (as opposed to command-l
 │   ├── masks                 #   mask collators, masking utilities, ...
 │   └── utils                 #   shared utilities
 └── configs                   # the only place where config files are allowed (specify experiment params for app/eval runs)
+    ├── diagnostics           #   bounded local diagnostic configs
     ├── evals                 #   configs for launching vjepa frozen evaluations
+    ├── hpc                   #   stage-1 HPC diagnostic configs
     └── pretrain              #   configs for launching vjepa pretraining
 
 ```
@@ -160,6 +193,16 @@ pip install -r requirements-core.txt
 ```
 
 Then follow the Mamba and dataset steps in [SETUP.md](SETUP.md).
+For the bounded diagnostic path, install the lighter dependency set and run smoke tests before using paid compute:
+
+```bash
+python -m pip install -r requirements-diagnostics.txt
+python -m diagnostics.smoke --model vit_tiny --mask-type multiblock3d
+python -m diagnostics.smoke --model videomamba_tiny --predictor mamba --mask-type multiblock3d
+python -m diagnostics.smoke --model videomamba_tiny --predictor attention --mask-type row_tube
+```
+
+See [Implementation and diagnostic runbook](docs/diagnostic_study.md) for generated-video fixtures, SSv2 subset commands, frozen probes, and the phase-1 matrix.
 
 ## License
 See the [LICENSE](./LICENSE) file for details about the license under which this code is made available.

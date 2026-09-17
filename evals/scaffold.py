@@ -25,8 +25,12 @@ def main(
     args_eval,
     resume_preempt=False
 ):
-    module = _eval_module(eval_name, args_eval)
-    logger.info(f'Running evaluation: {eval_name} via {module}')
-    return importlib.import_module(module).main(
+    logger.info(f'Running evaluation: {eval_name}')
+    model_name = (
+        args_eval.get('pretrain', {}).get('model_name', '')
+        if isinstance(args_eval, dict) else ''
+    )
+    eval_module = 'eval_videomamba' if model_name.startswith('videomamba') else 'eval'
+    return importlib.import_module(f'evals.{eval_name}.{eval_module}').main(
         args_eval=args_eval,
         resume_preempt=resume_preempt)

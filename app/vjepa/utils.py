@@ -13,8 +13,6 @@ import yaml
 
 import torch 
 
-import src.models.vision_transformer as video_vit
-import src.models.predictor as vit_pred
 from src.models.utils.multimask import MultiMaskWrapper, PredictorMultiMaskWrapper
 from src.utils.schedulers import (
     WarmupCosineSchedule,
@@ -23,6 +21,31 @@ from src.utils.tensors import trunc_normal_
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger()
+
+video_vit = None
+vit_pred = None
+video_mamba = None
+vmamba_pred = None
+
+
+def _load_vit_modules():
+    global video_vit, vit_pred
+    if video_vit is None:
+        import src.models.vision_transformer as _video_vit
+        video_vit = _video_vit
+    if vit_pred is None:
+        import src.models.predictor as _vit_pred
+        vit_pred = _vit_pred
+
+
+def _load_videomamba_modules():
+    global video_mamba, vmamba_pred
+    if video_mamba is None:
+        import src.models.videomamba as _video_mamba
+        video_mamba = _video_mamba
+    if vmamba_pred is None:
+        import src.models.videomamba_predictor as _vmamba_pred
+        vmamba_pred = _vmamba_pred
 
 
 def load_checkpoint(
@@ -98,6 +121,7 @@ def init_video_model(
     zero_init_mask_tokens=True,
     use_sdpa=False,
 ):
+    _load_vit_modules()
     encoder = video_vit.__dict__[model_name](
         img_size=crop_size,
         patch_size=patch_size,
@@ -169,9 +193,9 @@ def init_video_mamba_model(
     zero_init_mask_tokens=True,
     use_sdpa=False,
 ):
-    import src.models.videomamba as video_mamba
-    import src.models.videomamba_predictor as vmamba_pred
-
+    _load_videomamba_modules()
+    if use_vit_pred:
+        _load_vit_modules()
     encoder = video_mamba.__dict__[model_name](
         img_size=crop_size,
         patch_size=patch_size,

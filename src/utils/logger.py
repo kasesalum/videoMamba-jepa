@@ -7,6 +7,7 @@
 
 import logging
 import sys
+import time
 
 import torch
 
@@ -47,7 +48,7 @@ class CSVLogger(object):
         self.fname = fname
         self.types = []
         # -- print headers
-        with open(self.fname, '+a') as f:
+        with self._open_for_append() as f:
             for i, v in enumerate(argv, 1):
                 self.types.append(v[0])
                 if i < len(argv):
@@ -55,8 +56,17 @@ class CSVLogger(object):
                 else:
                     print(v[1], end='\n', file=f)
 
+    def _open_for_append(self, attempts=20, delay=0.25):
+        for attempt in range(attempts):
+            try:
+                return open(self.fname, '+a')
+            except PermissionError:
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(delay)
+
     def log(self, *argv):
-        with open(self.fname, '+a') as f:
+        with self._open_for_append() as f:
             for i, tv in enumerate(zip(self.types, argv), 1):
                 end = ',' if i < len(argv) else '\n'
                 print(tv[0] % tv[1], end=end, file=f)

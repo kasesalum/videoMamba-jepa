@@ -31,7 +31,7 @@ def process_main(rank, fname, world_size, devices):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(devices[rank].split(':')[-1])
 
     import logging
-    from utils.logger import get_logger
+    from src.utils.logger import get_logger
     logger = get_logger(force=True)
     if rank == 0:
         logger.setLevel(logging.INFO)
@@ -49,9 +49,8 @@ def process_main(rank, fname, world_size, devices):
     # Log config
     if rank == 0:
         pprint.PrettyPrinter(indent=4).pprint(params)
-        log_folder = resolve_path(params['logging']['folder'])
-        os.makedirs(log_folder, exist_ok=True)
-        dump = os.path.join(log_folder, 'params-pretrain.yaml')
+        os.makedirs(params['logging']['folder'], exist_ok=True)
+        dump = os.path.join(params['logging']['folder'], 'params-pretrain.yaml')
         with open(dump, 'w') as f:
             yaml.dump(params, f)
 
@@ -67,8 +66,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
     num_gpus = len(args.devices)
     mp.set_start_method('spawn')
+    processes = []
     for rank in range(num_gpus):
-        mp.Process(
+        process = mp.Process(
             target=process_main,
             args=(rank, args.fname, num_gpus, args.devices)
-        ).start()
+        )
+        process.start()
+        processes.append(process)
+
+    failed = []
+    for process in processes:
+        process.join()
+        if process.exitcode != 0:
+            failed.append(process.exitcode)
+    if failed:
+        raise SystemExit(f"worker process failed with exit code(s): {failed}")

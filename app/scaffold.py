@@ -22,8 +22,12 @@ def _pretrain_module(app, args):
 
 def main(app, args, resume_preempt=False):
 
-    module = _pretrain_module(app, args)
-    logger.info(f'Running pre-training of app: {app} via {module}')
-    return importlib.import_module(module).main(
+    logger.info(f'Running pre-training of app: {app}')
+    trainer = args.get('trainer')
+    if trainer is None:
+        model_name = args.get('model', {}).get('model_name', '')
+        trainer = 'train_videomamba' if model_name.startswith('videomamba') else 'train'
+    logger.info(f'Using trainer module: app.{app}.{trainer}')
+    return importlib.import_module(f'app.{app}.{trainer}').main(
         args=args,
         resume_preempt=resume_preempt)

@@ -1,11 +1,16 @@
 .venv/
 .*.swp
+.DS_Store
 *.pyc
+__pycache__/
 src/datasets/SSv2/*
 /build/*
 output/
 output_dir/*
+diagnostic_runs/*
 *.egg
+*.egg-info/
+*.egg-info
 runs/*/events.out.tfevents.*
 *.egg-info/*
 .aider*

@@ -22,6 +22,7 @@ import time
 import numpy as np
 
 import torch
+import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
@@ -29,10 +30,10 @@ from torch.nn.parallel import DistributedDataParallel
 from src.datasets.data_manager import init_data
 from src.masks.random_tube import MaskCollator as TubeMaskCollator
 from src.masks.multiblock3d import MaskCollator as MB3DMaskCollator
+from src.masks.row_tube import MaskCollator as RowTubeMaskCollator
 from src.masks.utils import apply_masks
-from src.utils.distributed import init_distributed, AllReduce, wrap_ddp
-from src.utils.paths import resolve_path
-from utils.logger import (
+from src.utils.distributed import init_distributed, AllReduce
+from src.utils.logger import (
     CSVLogger,
     gpu_timer,
     get_logger,
@@ -45,6 +46,14 @@ from app.vjepa.utils import (
     load_checkpoint,
     init_video_model,
     init_opt,
+)
+from app.vjepa.diagnostic_utils import (
+    apply_target_transform,
+    clips_per_second,
+    device_hours,
+    feature_stats,
+    gradient_global_norm,
+    safe_max_memory_mb,
 )
 from app.vjepa.transforms import make_transforms
 
@@ -100,6 +109,7 @@ def main(args, resume_preempt=False):
     uniform_power = cfgs_model.get('uniform_power', True)
     use_mask_tokens = cfgs_model.get('use_mask_tokens', True)
     zero_init_mask_tokens = cfgs_model.get('zero_init_mask_tokens', True)
+    target_transform = cfgs_model.get('target_transform', 'layer_norm')
 
     # -- DATA
     cfgs_data = args.get('data')
@@ -154,8 +164,9 @@ def main(args, resume_preempt=False):
 
     # -- LOGGING
     cfgs_logging = args.get('logging')
-    folder = resolve_path(cfgs_logging.get('folder'))
+    folder = cfgs_logging.get('folder')
     tag = cfgs_logging.get('write_tag')
+    os.makedirs(folder, exist_ok=True)
 
     # ----------------------------------------------------------------------- #
     # ----------------------------------------------------------------------- #
@@ -198,8 +209,15 @@ def main(args, resume_preempt=False):
         ('%.5f', 'loss'),
         ('%.5f', 'loss-jepa'),
         ('%.5f', 'reg-loss'),
+        ('%.5f', 'target-var'),
+        ('%.5f', 'pred-var'),
+        ('%.5f', 'target-abs-mean'),
+        ('%.5f', 'pred-abs-mean'),
         ('%.5f', 'enc-grad-norm'),
         ('%.5f', 'pred-grad-norm'),
+        ('%.5f', 'mem-mb'),
+        ('%.5f', 'clips-per-sec'),
+        ('%.8f', 'device-hours'),
         ('%d', 'gpu-time(ms)'),
         ('%d', 'wall-time(ms)'),
     )
@@ -226,6 +244,14 @@ def main(args, resume_preempt=False):
     if mask_type == 'multiblock3d':
         logger.info('Initializing basic multi-block mask')
         mask_collator = MB3DMaskCollator(
+            crop_size=crop_size,
+            num_frames=num_frames,
+            patch_size=patch_size,
+            tubelet_size=tubelet_size,
+            cfgs_mask=cfgs_mask)
+    elif mask_type == 'row_tube':
+        logger.info('Initializing row-tube mask')
+        mask_collator = RowTubeMaskCollator(
             crop_size=crop_size,
             num_frames=num_frames,
             patch_size=patch_size,
@@ -293,9 +319,10 @@ def main(args, resume_preempt=False):
         mixed_precision=mixed_precision,
         betas=betas,
         eps=eps)
-    encoder = wrap_ddp(encoder, static_graph=True)
-    predictor = wrap_ddp(predictor, static_graph=True)
-    target_encoder = wrap_ddp(target_encoder)
+    if dist.is_available() and dist.is_initialized():
+        encoder = DistributedDataParallel(encoder, static_graph=True)
+        predictor = DistributedDataParallel(predictor, static_graph=True)
+        target_encoder = DistributedDataParallel(target_encoder)
     for p in target_encoder.parameters():
         p.requires_grad = False
 
@@ -373,6 +400,12 @@ def main(args, resume_preempt=False):
         input_var_min_meter = AverageMeter()
         jepa_loss_meter = AverageMeter()
         reg_loss_meter = AverageMeter()
+        target_var_meter = AverageMeter()
+        pred_var_meter = AverageMeter()
+        target_abs_meter = AverageMeter()
+        pred_abs_meter = AverageMeter()
+        throughput_meter = AverageMeter()
+        device_hours_meter = AverageMeter()
         mask_meters = [AverageMeter() for _ in range(len(cfgs_mask))]
         gpu_time_meter = AverageMeter()
         wall_time_meter = AverageMeter()
@@ -425,7 +458,7 @@ def main(args, resume_preempt=False):
                     with torch.no_grad():
                         h = target_encoder(c)
                         # print(f"target outputs: {h.shape}")
-                        h = F.layer_norm(h, (h.size(-1),))  # normalize over feature-dim  [B, N, D]
+                        h = apply_target_transform(h, target_transform)
                         # print(f"normalized target features: {h.shape}")
                         # -- create targets (masked regions of h)
                         # print(f"shape of masks_pred: {masks_pred}")
@@ -460,6 +493,8 @@ def main(args, resume_preempt=False):
                     loss_jepa = loss_fn(z, h)  # jepa prediction loss
                     pstd_z = reg_fn(z)  # predictor variance across patches
                     loss_reg += torch.mean(F.relu(1.-pstd_z))
+                    target_var, target_abs = feature_stats(h)
+                    pred_var, pred_abs = feature_stats(z)
                 loss = loss_jepa + reg_coeff * loss_reg
 
                 # Step 2. Backward & step
@@ -469,6 +504,8 @@ def main(args, resume_preempt=False):
                     scaler.unscale_(optimizer)
                 else:
                     loss.backward()
+                _enc_norm = gradient_global_norm(encoder.parameters())
+                _pred_norm = gradient_global_norm(predictor.parameters())
                 if (epoch > warmup) and (clip_grad is not None):
                     _enc_norm = torch.nn.utils.clip_grad_norm_(encoder.parameters(), clip_grad)
                     _pred_norm = torch.nn.utils.clip_grad_norm_(predictor.parameters(), clip_grad)
@@ -499,9 +536,17 @@ def main(args, resume_preempt=False):
                     grad_stats,
                     grad_stats_pred,
                     optim_stats,
+                    target_var,
+                    pred_var,
+                    target_abs,
+                    pred_abs,
                 )
-            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats,), gpu_etime_ms = gpu_timer(train_step)
+            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats, target_var, pred_var, target_abs, pred_abs,), gpu_etime_ms = gpu_timer(train_step)
             iter_elapsed_time_ms = (time.time() - itr_start_time) * 1000.
+            local_clip_count = clips.size(0)
+            memory_mb = safe_max_memory_mb()
+            clip_rate = clips_per_second(local_clip_count, world_size, iter_elapsed_time_ms)
+            iter_device_hours = device_hours(world_size, iter_elapsed_time_ms)
             loss_meter.update(loss)
             input_var = float(AllReduce.apply(clips.view(clips.shape[0], -1).var(dim=1).mean(dim=0)))
             input_var_min = float(AllReduce.apply(torch.min(clips.view(clips.shape[0], -1).var(dim=1))))
@@ -509,6 +554,12 @@ def main(args, resume_preempt=False):
             input_var_min_meter.update(input_var_min)
             jepa_loss_meter.update(loss_jepa)
             reg_loss_meter.update(loss_reg)
+            target_var_meter.update(target_var)
+            pred_var_meter.update(pred_var)
+            target_abs_meter.update(target_abs)
+            pred_abs_meter.update(pred_abs)
+            throughput_meter.update(clip_rate)
+            device_hours_meter.update(iter_device_hours)
             gpu_time_meter.update(gpu_etime_ms)
             wall_time_meter.update(iter_elapsed_time_ms)
 
@@ -520,8 +571,15 @@ def main(args, resume_preempt=False):
                     loss,
                     loss_jepa,
                     loss_reg,
+                    target_var,
+                    pred_var,
+                    target_abs,
+                    pred_abs,
                     grad_stats.global_norm,
                     grad_stats_pred.global_norm,
+                    memory_mb,
+                    clip_rate,
+                    iter_device_hours,
                     gpu_etime_ms,
                     iter_elapsed_time_ms)
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
@@ -529,6 +587,8 @@ def main(args, resume_preempt=False):
                         '[%d, %5d] loss: %.3f | p%.3f r%.3f | '
                         'input_var: %.3f %.3f | '
                         'masks: %s '
+                        'target/pred var: %.3f %.3f | '
+                        'throughput: %.2f clips/s | '
                         '[wd: %.2e] [lr: %.2e] '
                         '[mem: %.2e] '
                         '[gpu: %.1f ms]'
@@ -540,9 +600,12 @@ def main(args, resume_preempt=False):
                            input_var_meter.avg,
                            input_var_min_meter.avg,
                            '[' + ', '.join(['%.1f' % m.avg for m in mask_meters]) + ']',
+                           target_var_meter.avg,
+                           pred_var_meter.avg,
+                           throughput_meter.avg,
                            _new_wd,
                            _new_lr,
-                           torch.cuda.max_memory_allocated() / 1024.0**2,
+                           memory_mb,
                            gpu_time_meter.avg,
                            wall_time_meter.avg))
 

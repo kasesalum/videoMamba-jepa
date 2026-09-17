@@ -13,7 +13,7 @@ import yaml
 import submitit
 
 from app.scaffold import main as app_main
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(force=True)
 
@@ -57,6 +57,10 @@ class Trainer:
         logger.info('loaded pretrain params...')
         pp = pprint.PrettyPrinter(indent=4)
         pp.pprint(params)
+        os.makedirs(params['logging']['folder'], exist_ok=True)
+        dump = os.path.join(params['logging']['folder'], 'params-pretrain.yaml')
+        with open(dump, 'w') as f:
+            yaml.dump(params, f)
 
         # Launch app with loaded config
         resume_preempt = False if load_model is None else load_model

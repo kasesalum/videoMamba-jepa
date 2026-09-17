@@ -1,0 +1,31 @@
+# Linux/CUDA runtime tested target: CUDA 11.8, Python 3.10
+# Install torch/torchvision from the PyTorch CUDA 11.8 index first.
+
+numpy==1.26.4
+pyyaml==6.0.1
+opencv-python==4.10.0.84
+submitit==1.5.1
+braceexpand==0.1.7
+webdataset==0.2.86
+timm==0.9.16
+decord==0.6.0
+pandas==2.1.4
+einops==0.7.0
+beartype==0.18.5
+av==12.0.0
+fvcore==0.1.5.post20221221
+omegaconf==2.3.0
+pillow==10.3.0
+scipy==1.11.4
+scikit-image==0.22.0
+tensorboardX==2.6.2.2
+termcolor==2.4.0
+tqdm==4.66.2
+transformers==4.40.2
+wandb==0.17.0
+lm_eval==0.4.2
+regex==2024.4.16
+requests==2.31.0
+packaging==24.1
+imageio==2.34.1
+ftfy==6.2.0

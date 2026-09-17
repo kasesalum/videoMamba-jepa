@@ -1,0 +1,13 @@
+torch>=2
+torchvision
+numpy<2.0
+pyyaml
+pandas
+timm
+einops
+decord
+imageio
+imageio-ffmpeg
+opencv-python-headless==4.9.0.80
+tensorboard
+huggingface_hub
